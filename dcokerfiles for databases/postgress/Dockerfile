@@ -1,21 +1,35 @@
-# pull official base image
+
 FROM postgres:16
 
-# Install dependencies for building extensions
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    git \
-    libpq-dev \
-    postgresql-server-dev-16  # Este paquete incluye postgres.h y otros necesarios
+ARG PGVECTOR_VERSION=v0.7.4
 
-# Clone pgvector repo y compilar la extensión
-RUN cd /tmp && \
-    git clone --branch v0.7.4 https://github.com/pgvector/pgvector.git && \
-    cd pgvector && \
-    make && \
-    make install
+# Forzar pg_config de PostgreSQL 16
+ENV PG_CONFIG=/usr/lib/postgresql/16/bin/pg_config
 
-# run create.sql on init
-ADD create.sql /docker-entrypoint-initdb.d
+# Instalar dependencias
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        git \
+        ca-certificates \
+        libpq-dev \
+        postgresql-server-dev-16 \
+        postgresql-16-cron \
+        postgresql-contrib && \
+    update-ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
+# Compilar pgvector 0.7.4 para PostgreSQL 16
+RUN git clone \
+        --depth 1 \
+        --branch ${PGVECTOR_VERSION} \
+        https://github.com/pgvector/pgvector.git \
+        /tmp/pgvector && \
+    cd /tmp/pgvector && \
+    ${PG_CONFIG} --version && \
+    make clean PG_CONFIG=${PG_CONFIG} && \
+    make PG_CONFIG=${PG_CONFIG} && \
+    make install PG_CONFIG=${PG_CONFIG} && \
+    rm -rf /tmp/pgvector
 
+COPY create.sql /docker-entrypoint-initdb.d/
